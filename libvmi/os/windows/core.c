@@ -1,3 +1,4 @@
+
 /* The LibVMI Library is an introspection library that simplifies access to
  * memory in a target virtual machine or in a file containing a dump of
  * a system's physical memory.  LibVMI is based on the XenAccess Library.
@@ -50,6 +51,8 @@ win_ver_t ntbuild2version(uint16_t ntbuildnumber)
         case 9200:
         case 9600:
             return VMI_OS_WINDOWS_8;
+        case 18432:
+            return VMI_OS_WINDOWS_10;
         default:
             break;
     }
@@ -615,8 +618,7 @@ init_from_rekall_profile(vmi_instance_t vmi)
     }
 
     if (ntbuild2version(ntbuildnumber) == VMI_OS_WINDOWS_UNKNOWN) {
-        dbprint(VMI_DEBUG_MISC, "Unknown Windows NtBuildNumber: %u. The Rekall Profile may be incorrect for this Windows!\n", ntbuildnumber);
-        goto done;
+        dbprint(VMI_DEBUG_MISC, "Unknown Windows NtBuildNumber: %u, the Rekall Profile may be incorrect for this Windows!\n", ntbuildnumber);
     }
 
     // The system map seems to be good, lets grab all the required offsets
