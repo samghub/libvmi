@@ -94,6 +94,8 @@ void events_init(vmi_instance_t vmi)
             NULL);
     vmi->clear_events = g_hash_table_new_full(g_int64_hash, g_int64_equal,
             g_free, NULL);
+    vmi->swap_events = g_hash_table_new_full(g_int64_hash, g_int64_equal,
+            g_free, NULL);
 }
 
 void events_destroy(vmi_instance_t vmi)
@@ -410,6 +412,24 @@ status_t clear_singlestep_event(vmi_instance_t vmi, vmi_event_t *event)
     return rc;
 }
 
+status_t swap_events(vmi_instance_t vmi, vmi_event_t *swap_from, vmi_event_t *swap_to) {
+    status_t rc;
+    if(swap_from->vmm_pagetable_id != swap_to->vmm_pagetable_id) {
+        rc = driver_set_mem_access(vmi, &swap_from->mem_event, VMI_MEMACCESS_N, swap_from->vmm_pagetable_id);
+        if(rc == VMI_FAILURE)
+            return rc;
+    }
+
+    rc = driver_set_mem_access(vmi, &swap_to->mem_event, swap_to->mem_event.in_access, swap_to->vmm_pagetable_id);
+    if(rc == VMI_FAILURE)
+        return rc;
+
+    addr_t page_key = swap_from->mem_event.physical_address >> 12;
+    g_hash_table_replace(vmi->mem_events, g_memdup(&page_key, sizeof(addr_t)), swap_to);
+
+    return VMI_SUCCESS;
+}
+
 //----------------------------------------------------------------------------
 // Public event functions.
 
@@ -422,6 +442,45 @@ vmi_event_t *vmi_get_mem_event(vmi_instance_t vmi, addr_t physical_address)
 {
     addr_t page_key = physical_address >> 12;
     return g_hash_table_lookup(vmi->mem_events, &page_key);
+}
+
+status_t vmi_swap_events(vmi_instance_t vmi, vmi_event_t* swap_from, vmi_event_t *swap_to)
+{
+    if(swap_from->type == swap_to->type && swap_from->type == VMI_EVENT_MEMORY)
+    {
+        addr_t page_key = swap_from->mem_event.physical_address >> 12;
+
+        if(!g_hash_table_lookup(vmi->mem_events, &page_key)) {
+            dbprint(VMI_DEBUG_EVENTS, "The event to be swapped is not registered.\n");
+            return VMI_FAILURE;
+        }
+
+        /*
+         * We can't swap events when in an event callback rigt away
+         * because there may be more events in the queue already
+         * that were triggered by the event we would be clearing now.
+         * The driver needs to process this list when it can safely.
+         * The user may request a callback when the struct can be safely
+         * freed.
+         */
+        if ( vmi->event_callback ) {
+            if (!g_hash_table_lookup(vmi->swap_events, &swap_from)) {
+                g_hash_table_insert(vmi->swap_events,
+                                    g_memdup(&swap_from, sizeof(void*)),
+                                    swap_to);
+                return VMI_SUCCESS;
+            }
+
+            dbprint(VMI_DEBUG_EVENTS, "Event was already queued for swapping.\n");
+            return VMI_FAILURE;
+        }
+
+        return swap_events(vmi, swap_from, swap_to);
+
+    }
+
+    dbprint(VMI_DEBUG_EVENTS, "Swapping events is only implemented for VMI_EVENT_MEMORY type!\n");
+    return VMI_FAILURE;
 }
 
 status_t vmi_register_event(vmi_instance_t vmi, vmi_event_t* event)

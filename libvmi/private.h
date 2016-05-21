@@ -153,6 +153,8 @@ struct vmi_instance {
     gboolean event_callback; /**< flag indicating that libvmi is currently issuing an event callback */
 
     GHashTable *clear_events; /**< table to save vmi_clear_event requests when event_callback is set */
+
+    GHashTable *swap_events; /**< table to save vmi_swap_events requests when event_callback is set */
 };
 
 /** Event singlestep reregister wrapper */
@@ -391,6 +393,11 @@ status_t vmi_pagetable_lookup_cache(
         gpointer key,
         gpointer value,
         gpointer data);
+    status_t swap_events(
+        vmi_instance_t vmi,
+        vmi_event_t *swap_from,
+        vmi_event_t *swap_to);
+
     #define ghashtable_foreach(table, iter, key, val) \
         g_hash_table_iter_init(&iter, table); \
         while(g_hash_table_iter_next(&iter,(void**)key,(void**)val))
